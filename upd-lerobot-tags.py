@@ -17,82 +17,18 @@ def get_models_with_name(name):
 def generate_readme_batch1(model_id: str) -> str:
     """Generate a default README.md content for Batch 1 repositories."""
     model_name = model_id.split("/")[-1]
-    return textwrap.dedent(f"""\
-    ---
-    library_name: lerobot
-    license: apache-2.0
-    pipeline_tag: robotics
-    tags:
-    - robotics
-    ---
-
-    # Model Card for {model_name}
-
-    <!-- Provide a quick summary of what the model is/does. -->
-
-
-    This policy has been trained and pushed to the Hub using [LeRobot](https://github.com/huggingface/lerobot).
-    See the full documentation at [LeRobot Docs](https://huggingface.co/docs/lerobot/index).
-
-    ---
-
-    ## How to Get Started with the Model
-
-    For a complete walkthrough, see the [training guide](https://huggingface.co/docs/lerobot/il_robots#train-a-policy).
-    Below is the short version on how to train and run inference/eval:
-
-    ### Train from scratch
-
-    ```bash
-    python lerobot/scripts/train.py \
-        --dataset.repo_id=<user _or_org>/<dataset> \
-        --policy.type=act \
-        --output_dir=outputs/train/<desired_policy_repo_id> \
-        --job_name=lerobot_training \
-        --policy.device=cuda \
-        --policy.repo_id=<user_or_org>/<desired_policy_repo_id> \
-        --wandb.enable=true
-    ```
-
-    *Writes checkpoints to `outputs/train/<desired_policy_repo_id>/checkpoints/`.*
-
-    ### Evaluate the policy
-
-    ```bash
-    python -m lerobot.record \
-        --robot.type=so100_follower \
-        --dataset.repo_id=<user_or_org>/eval_<dataset> \
-        --policy.path=<user_or_org>/<desired_policy_repo_id> \
-        --episodes=10
-    ```
-
-    Prefix the dataset repo with **eval_** and supply `--policy.path` pointing to a local or hub checkpoint.
-
-    ---
-    """)
-
-def generate_readme_batch2(model_id: str, base_model_name: str) -> str:
-    """Generate a default README.md content for Batch 2 repositories."""
-    repo_name = model_id.split("/")[-1]
-    base_model_repo = f"lerobot/{base_model_name}_base"
-    return textwrap.dedent(f"""---
-base_model: {base_model_repo}
+    return textwrap.dedent(f"""
+---
 library_name: lerobot
 license: apache-2.0
-model_name: {base_model_name}
 pipeline_tag: robotics
 tags:
-- robotics
-- {base_model_name}
+  - robotics
 ---
 
-# Model Card for {repo_name}
+# Model Card for {model_name}
 
 <!-- Provide a quick summary of what the model is/does. -->
-
-
-[SmolVLA](https://huggingface.co/papers/2506.01844) is a compact, efficient vision-language-action model that achieves competitive performance at reduced computational costs and can be deployed on consumer-grade hardware.
-
 
 This policy has been trained and pushed to the Hub using [LeRobot](https://github.com/huggingface/lerobot).
 See the full documentation at [LeRobot Docs](https://huggingface.co/docs/lerobot/index).
@@ -107,13 +43,13 @@ Below is the short version on how to train and run inference/eval:
 ### Train from scratch
 
 ```bash
-python lerobot/scripts/train.py \
-  --dataset.repo_id=<user_or_org>/<dataset> \
-  --policy.type=act \
-  --output_dir=outputs/train/<desired_policy_repo_id> \
-  --job_name=lerobot_training \
-  --policy.device=cuda \
-  --policy.repo_id=<user_or_org>/<desired_policy_repo_id> \
+python lerobot/scripts/train.py \\
+  --dataset.repo_id=<user_or_org>/<dataset> \\
+  --policy.type=act \\
+  --output_dir=outputs/train/<desired_policy_repo_id> \\
+  --job_name=lerobot_training \\
+  --policy.device=cuda \\
+  --policy.repo_id=<user_or_org>/<desired_policy_repo_id> \\
   --wandb.enable=true
 ```
 
@@ -122,10 +58,72 @@ python lerobot/scripts/train.py \
 ### Evaluate the policy
 
 ```bash
-python -m lerobot.record \
-  --robot.type=so100_follower \
-  --dataset.repo_id=<user_or_org>/eval_<dataset> \
-  --policy.path=<user_or_org>/<desired_policy_repo_id> \
+python -m lerobot.record \\
+  --robot.type=so100_follower \\
+  --dataset.repo_id=<user_or_org>/eval_<dataset> \\
+  --policy.path=<user_or_org>/<desired_policy_repo_id> \\
+  --episodes=10
+```
+
+Prefix the dataset repo with **eval_** and supply `--policy.path` pointing to a local or hub checkpoint.
+
+---
+""")
+
+def generate_readme_batch2(model_id: str, base_model_name: str) -> str:
+    """Generate a default README.md content for Batch 2 repositories."""
+    repo_name = model_id.split("/")[-1]
+    base_model_repo = f"lerobot/{base_model_name}_base"
+    return textwrap.dedent(f"""
+---
+base_model: {base_model_repo}
+library_name: lerobot
+license: apache-2.0
+model_name: {base_model_name}
+pipeline_tag: robotics
+tags:
+  - robotics
+  - {base_model_name}
+---
+
+# Model Card for {repo_name}
+
+<!-- Provide a quick summary of what the model is/does. -->
+
+[SmolVLA](https://huggingface.co/papers/2506.01844) is a compact, efficient vision-language-action model that achieves competitive performance at reduced computational costs and can be deployed on consumer-grade hardware.
+
+This policy has been trained and pushed to the Hub using [LeRobot](https://github.com/huggingface/lerobot).
+See the full documentation at [LeRobot Docs](https://huggingface.co/docs/lerobot/index).
+
+---
+
+## How to Get Started with the Model
+
+For a complete walkthrough, see the [training guide](https://huggingface.co/docs/lerobot/il_robots#train-a-policy).
+Below is the short version on how to train and run inference/eval:
+
+### Train from scratch
+
+```bash
+python lerobot/scripts/train.py \\
+  --dataset.repo_id=<user_or_org>/<dataset> \\
+  --policy.type=act \\
+  --output_dir=outputs/train/<desired_policy_repo_id> \\
+  --job_name=lerobot_training \\
+  --policy.device=cuda \\
+  --policy.repo_id=<user_or_org>/<desired_policy_repo_id> \\
+  --wandb.enable=true
+```
+
+*Writes checkpoints to `outputs/train/<desired_policy_repo_id>/checkpoints/`.*
+
+### Evaluate the policy
+
+```bash
+python -m lerobot.record \\
+  --robot.type=so100_follower \\
+  --dataset.repo_id=<user_or_org>/eval_<dataset> \\
+  --policy.path=<user_or_org>/<desired_policy_repo_id> \\
   --episodes=10
 ```
 

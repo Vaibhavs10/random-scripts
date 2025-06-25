@@ -4,6 +4,8 @@ import concurrent.futures
 from tqdm import tqdm
 import time
 import argparse  # For CLI argument parsing
+import textwrap  # For generating README templates
+import requests  # To catch HTTP errors from ModelCard.load
 
 # Initialize HF API
 api = HfApi()
@@ -12,14 +14,141 @@ def get_models_with_name(name):
     """Fetch all models containing the given name."""
     return list(api.list_models(search=name))
 
+def generate_readme_batch1(model_id: str) -> str:
+    """Generate a default README.md content for Batch 1 repositories."""
+    model_name = model_id.split("/")[-1]
+    return textwrap.dedent(f"""\
+    ---
+    library_name: lerobot
+    license: apache-2.0
+    pipeline_tag: robotics
+    tags:
+    - robotics
+    ---
+
+    # Model Card for {model_name}
+
+    <!-- Provide a quick summary of what the model is/does. -->
+
+
+    This policy has been trained and pushed to the Hub using [LeRobot](https://github.com/huggingface/lerobot).
+    See the full documentation at [LeRobot Docs](https://huggingface.co/docs/lerobot/index).
+
+    ---
+
+    ## How to Get Started with the Model
+
+    For a complete walkthrough, see the [training guide](https://huggingface.co/docs/lerobot/il_robots#train-a-policy).
+    Below is the short version on how to train and run inference/eval:
+
+    ### Train from scratch
+
+    ```bash
+    python lerobot/scripts/train.py \
+        --dataset.repo_id=<user _or_org>/<dataset> \
+        --policy.type=act \
+        --output_dir=outputs/train/<desired_policy_repo_id> \
+        --job_name=lerobot_training \
+        --policy.device=cuda \
+        --policy.repo_id=<user_or_org>/<desired_policy_repo_id> \
+        --wandb.enable=true
+    ```
+
+    *Writes checkpoints to `outputs/train/<desired_policy_repo_id>/checkpoints/`.*
+
+    ### Evaluate the policy
+
+    ```bash
+    python -m lerobot.record \
+        --robot.type=so100_follower \
+        --dataset.repo_id=<user_or_org>/eval_<dataset> \
+        --policy.path=<user_or_org>/<desired_policy_repo_id> \
+        --episodes=10
+    ```
+
+    Prefix the dataset repo with **eval_** and supply `--policy.path` pointing to a local or hub checkpoint.
+
+    ---
+    """)
+
+def generate_readme_batch2(model_id: str, base_model_name: str) -> str:
+    """Generate a default README.md content for Batch 2 repositories."""
+    repo_name = model_id.split("/")[-1]
+    base_model_repo = f"lerobot/{base_model_name}_base"
+    return textwrap.dedent(f"""---
+base_model: {base_model_repo}
+library_name: lerobot
+license: apache-2.0
+model_name: {base_model_name}
+pipeline_tag: robotics
+tags:
+- robotics
+- {base_model_name}
+---
+
+# Model Card for {repo_name}
+
+<!-- Provide a quick summary of what the model is/does. -->
+
+
+[SmolVLA](https://huggingface.co/papers/2506.01844) is a compact, efficient vision-language-action model that achieves competitive performance at reduced computational costs and can be deployed on consumer-grade hardware.
+
+
+This policy has been trained and pushed to the Hub using [LeRobot](https://github.com/huggingface/lerobot).
+See the full documentation at [LeRobot Docs](https://huggingface.co/docs/lerobot/index).
+
+---
+
+## How to Get Started with the Model
+
+For a complete walkthrough, see the [training guide](https://huggingface.co/docs/lerobot/il_robots#train-a-policy).
+Below is the short version on how to train and run inference/eval:
+
+### Train from scratch
+
+```bash
+python lerobot/scripts/train.py \
+  --dataset.repo_id=<user_or_org>/<dataset> \
+  --policy.type=act \
+  --output_dir=outputs/train/<desired_policy_repo_id> \
+  --job_name=lerobot_training \
+  --policy.device=cuda \
+  --policy.repo_id=<user_or_org>/<desired_policy_repo_id> \
+  --wandb.enable=true
+```
+
+*Writes checkpoints to `outputs/train/<desired_policy_repo_id>/checkpoints/`.*
+
+### Evaluate the policy
+
+```bash
+python -m lerobot.record \
+  --robot.type=so100_follower \
+  --dataset.repo_id=<user_or_org>/eval_<dataset> \
+  --policy.path=<user_or_org>/<desired_policy_repo_id> \
+  --episodes=10
+```
+
+Prefix the dataset repo with **eval_** and supply `--policy.path` pointing to a local or hub checkpoint.
+
+---
+""")
+
 def create_pr_for_model(model_id, changes, pr_description):
     """Create a PR for a model with the specified changes and description."""
     try:
-        # Get current model card
-        card = ModelCard.load(model_id)
-        
+        # Try to load existing model card; if README is missing, continue with blank template
+        try:
+            card = ModelCard.load(model_id)
+            card_data = card.data.to_dict()
+            card_content = card.content
+        except (requests.exceptions.HTTPError, RepositoryNotFoundError):
+            # README.md not found – start with empty card
+            card = None
+            card_data = {}
+            card_content = ""
+
         # Prepare changes
-        card_data = card.data.to_dict()
         for key, value in changes.items():
             if key == 'tags':
                 current_tags = card_data.get('tags', [])
@@ -29,26 +158,43 @@ def create_pr_for_model(model_id, changes, pr_description):
             elif key == 'pipeline_tag' and 'pipeline_tag' not in card_data:
                 card_data['pipeline_tag'] = value
             elif key == 'base_model':
-                card_data['base_model'] = value
+                # Store full repo path for base model for clarity
+                full_base_model = value if value.startswith("lerobot/") else f"lerobot/{value}_base"
+                card_data['base_model'] = full_base_model
+                # Also add the base model name as an extra tag for discoverability
+                extra_tag = value.split("/")[-1]  # get plain name without namespace
+                current_tags = card_data.get('tags', [])
+                if extra_tag not in current_tags:
+                    current_tags.append(extra_tag)
+                    card_data['tags'] = current_tags
+        
+        # Determine which template to use when README is missing
+        if not card_content.strip():
+            if 'base_model' in changes:
+                template_str = generate_readme_batch2(model_id, changes['base_model'])
+            else:
+                template_str = generate_readme_batch1(model_id)
+        else:
+            template_str = card_content
         
         # Update card
         updated_card = ModelCard.from_template(
             ModelCardData(**card_data),
-            template_str=card.content  # Keep existing content
+            template_str=template_str  # Use existing or newly generated content
         )
         
         # Create PR with description
-        updated_card.push_to_hub(
+        pr_url = updated_card.push_to_hub(
             model_id,
             commit_message="Add Robotics tag and metadata",
-            pr_description=pr_description,
+            commit_description=pr_description,
             create_pr=True,
             repo_type="model"
         )
-        return True
+        return pr_url
     except Exception as e:
         print(f"Error processing {model_id}: {str(e)}")
-        return False
+        return None
 
 def batch_process_models(model_names, changes, batch_name, pr_description, use_direct_ids=False):
     """Process a batch of models with the given changes and PR description."""
@@ -64,6 +210,7 @@ def batch_process_models(model_names, changes, batch_name, pr_description, use_d
     
     # Process with threading (limited to 5 concurrent requests to be polite)
     success_count = 0
+    pr_links = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = []
         for model in all_models:
@@ -71,11 +218,17 @@ def batch_process_models(model_names, changes, batch_name, pr_description, use_d
             futures.append(executor.submit(create_pr_for_model, model_id, changes, pr_description))
         
         for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc=batch_name):
-            if future.result():
+            pr_url = future.result()
+            if pr_url:
                 success_count += 1
+                pr_links.append(pr_url)
             time.sleep(1)  # Rate limiting
     
     print(f"Successfully created PRs for {success_count}/{len(all_models)} models in {batch_name}")
+    if pr_links:
+        print("Created Pull Requests:")
+        for link in pr_links:
+            print(f" - {link}")
 
 def main():
     parser = argparse.ArgumentParser(description="Bulk update robotics metadata on Hugging Face models.")

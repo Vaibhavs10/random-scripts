@@ -1,8 +1,9 @@
-ifrom huggingface_hub import HfApi, ModelCard, ModelCardData
+from huggingface_hub import HfApi, ModelCard, ModelCardData
 from huggingface_hub.utils import RepositoryNotFoundError
 import concurrent.futures
 from tqdm import tqdm
 import time
+import argparse  # For CLI argument parsing
 
 # Initialize HF API
 api = HfApi()
@@ -49,11 +50,15 @@ def create_pr_for_model(model_id, changes, pr_description):
         print(f"Error processing {model_id}: {str(e)}")
         return False
 
-def batch_process_models(model_names, changes, batch_name, pr_description):
+def batch_process_models(model_names, changes, batch_name, pr_description, use_direct_ids=False):
     """Process a batch of models with the given changes and PR description."""
     all_models = []
-    for name in model_names:
-        all_models.extend(get_models_with_name(name))
+    if use_direct_ids:
+        # Treat provided names as full repository IDs
+        all_models = model_names
+    else:
+        for name in model_names:
+            all_models.extend(get_models_with_name(name))
     
     print(f"Found {len(all_models)} models for {batch_name}")
     
@@ -62,7 +67,8 @@ def batch_process_models(model_names, changes, batch_name, pr_description):
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = []
         for model in all_models:
-            futures.append(executor.submit(create_pr_for_model, model.modelId, changes, pr_description))
+            model_id = model if use_direct_ids else model.modelId
+            futures.append(executor.submit(create_pr_for_model, model_id, changes, pr_description))
         
         for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc=batch_name):
             if future.result():
@@ -72,6 +78,13 @@ def batch_process_models(model_names, changes, batch_name, pr_description):
     print(f"Successfully created PRs for {success_count}/{len(all_models)} models in {batch_name}")
 
 def main():
+    parser = argparse.ArgumentParser(description="Bulk update robotics metadata on Hugging Face models.")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode; model names are treated as full repo IDs.")
+    parser.add_argument("--batch1", nargs="+", default=[], help="Model repo IDs to process in Batch 1 when --debug is used.")
+    parser.add_argument("--batch2", nargs="+", default=[], help="Model repo IDs to process in Batch 2 when --debug is used.")
+
+    args = parser.parse_args()
+
     # PR descriptions
     batch1_pr_description = """This PR adds standard Robotics metadata to the model card:
 - Added 'Robotics' to tags
@@ -102,10 +115,19 @@ These changes help improve discoverability and provide better model lineage info
         'pipeline_tag': 'robotics',
         'base_model': 'smolvla'
     }
+
+    # Override default names when debug mode is active and lists provided
+    direct_ids = False
+    if args.debug:
+        if args.batch1:
+            batch1_names = args.batch1
+        if args.batch2:
+            batch2_names = args.batch2
+        direct_ids = True  # Provided names are full repo IDs
     
     print("Starting batch processing...")
-    batch_process_models(batch1_names, batch1_changes, "Batch 1 (Add Robotics tag)", batch1_pr_description)
-    batch_process_models(batch2_names, batch2_changes, "Batch 2 (Add Robotics tag + base_model)", batch2_pr_description)
+    batch_process_models(batch1_names, batch1_changes, "Batch 1 (Add Robotics tag)", batch1_pr_description, use_direct_ids=direct_ids)
+    batch_process_models(batch2_names, batch2_changes, "Batch 2 (Add Robotics tag + base_model)", batch2_pr_description, use_direct_ids=direct_ids)
     
     print("All batches processed!")
 
